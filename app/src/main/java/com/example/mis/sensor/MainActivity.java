@@ -5,6 +5,8 @@ package com.example.mis.sensor;
 
 import android.content.Context;
 import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.AsyncTask;
 import android.support.v7.app.AppCompatActivity;
@@ -16,7 +18,11 @@ import com.example.mis.sensor.FFT;
 
 import java.util.Random;
 
-public class MainActivity extends AppCompatActivity {
+/**
+ * https://code.tutsplus.com/tutorials/using-the-accelerometer-on-android--mobile-22125
+ * https://developer.android.com/guide/topics/sensors/sensors_motion
+ */
+public class MainActivity extends AppCompatActivity implements SensorEventListener {
 
     //example variables
     private double[] rndAccExamplevalues;
@@ -25,6 +31,7 @@ public class MainActivity extends AppCompatActivity {
     // sensor
     private SensorManager mSensorManager;
     private Sensor mAccelerometer;
+    private float mCoorX, mCoorY, mCoorZ;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -34,8 +41,9 @@ public class MainActivity extends AppCompatActivity {
         // check whether accelerometer exists
         mAccelerometer = null;
         mSensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
-        if (mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) != null){
+        if (mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) != null) {
             mAccelerometer = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER); // accelerometer exists
+            mSensorManager.registerListener(this, mAccelerometer , SensorManager.SENSOR_DELAY_NORMAL);
         }
         else {
             Toast accelerometer_error = Toast.makeText(MainActivity.this, "Error! No accelerometer found!", Toast.LENGTH_SHORT);
@@ -46,6 +54,39 @@ public class MainActivity extends AppCompatActivity {
         rndAccExamplevalues = new double[64];
         randomFill(rndAccExamplevalues);
         new FFTAsynctask(64).execute(rndAccExamplevalues);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        mSensorManager.registerListener(this, mAccelerometer, SensorManager.SENSOR_DELAY_NORMAL);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        mSensorManager.unregisterListener(this);
+    }
+
+    @Override
+    public void onSensorChanged(SensorEvent event) {
+        Sensor sensor = event.sensor;
+
+        if (sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
+            // get device position
+            float x = event.values[0];
+            float y = event.values[1];
+            float z = event.values[2];
+
+            mCoorX = x;
+            mCoorY = y;
+            mCoorZ = z;
+        }
+    }
+
+    @Override
+    public void onAccuracyChanged(Sensor sensor, int accuracy) {
+
     }
 
 
