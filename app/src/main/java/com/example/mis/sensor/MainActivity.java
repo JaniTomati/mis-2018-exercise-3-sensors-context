@@ -1,9 +1,17 @@
+// Jonas Dorsch    115763
+// Jana  Puschmann 115753
+
 package com.example.mis.sensor;
 
+import android.content.Context;
+import android.hardware.Sensor;
+import android.hardware.SensorManager;
 import android.os.AsyncTask;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
+import android.widget.Toast;
+
 import com.example.mis.sensor.FFT;
 
 import java.util.Random;
@@ -14,10 +22,25 @@ public class MainActivity extends AppCompatActivity {
     private double[] rndAccExamplevalues;
     private double[] freqCounts;
 
+    // sensor
+    private SensorManager mSensorManager;
+    private Sensor mAccelerometer;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        // check whether accelerometer exists
+        mAccelerometer = null;
+        mSensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
+        if (mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) != null){
+            mAccelerometer = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER); // accelerometer exists
+        }
+        else {
+            Toast accelerometer_error = Toast.makeText(MainActivity.this, "Error! No accelerometer found!", Toast.LENGTH_SHORT);
+            accelerometer_error.show();
+        }
 
         //initiate and fill example array with random values
         rndAccExamplevalues = new double[64];
