@@ -4,6 +4,7 @@
 package com.example.mis.sensor;
 
 import android.content.Context;
+import android.graphics.Color;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -16,6 +17,7 @@ import android.widget.Toast;
 
 import com.example.mis.sensor.FFT;
 import com.jjoe64.graphview.GraphView;
+import com.jjoe64.graphview.Viewport;
 import com.jjoe64.graphview.series.DataPoint;
 import com.jjoe64.graphview.series.LineGraphSeries;
 
@@ -25,9 +27,10 @@ import java.util.Random;
  * GraphView lib: http://www.android-graphview.org
  * https://code.tutsplus.com/tutorials/using-the-accelerometer-on-android--mobile-22125
  * https://developer.android.com/guide/topics/sensors/sensors_motion
- * https://stackoverflow.com/questions/8565401/android-get-normalized-acceleration
  */
 public class MainActivity extends AppCompatActivity implements SensorEventListener {
+
+    private static final float NS2S = 1.0f / 1000000000.0f;
 
     //example variables
     private double[] rndAccExamplevalues;
@@ -36,10 +39,10 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     // sensor
     private SensorManager mSensorManager;
     private Sensor mAccelerometer;
-    private float mCoorX, mCoorY, mCoorZ, mMagnitude; // acceleration vector
 
     // graph visualization
-    private GraphView graph;
+    private GraphView mAccelerometerVis;
+    private LineGraphSeries<DataPoint> mCoorXLine, mCoorYLine, mCoorZLine, mMagnitudeLine;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -52,21 +55,41 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         if (mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) != null) {
             mAccelerometer = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER); // accelerometer exists
             mSensorManager.registerListener(this, mAccelerometer , SensorManager.SENSOR_DELAY_NORMAL);
+
+            // initialize graph and curves
+            mAccelerometerVis = findViewById(R.id.accelerometer_vis);
+            mAccelerometerVis.setTitle("Accelerometer Data Visualization");
+            mAccelerometerVis.setBackgroundColor(Color.LTGRAY); // since magnitude curve will be white
+            Viewport viewport = mAccelerometerVis.getViewport();
+            viewport.setScalable(true);
+            viewport.setScalableY(true);
+            viewport.setScrollable(true);
+            viewport.setScrollableY(true);
+
+            mCoorXLine = new LineGraphSeries<>();
+            mCoorXLine.setTitle("x direction data");
+            mCoorXLine.setColor(Color.RED);
+            mAccelerometerVis.addSeries(mCoorXLine);
+
+            mCoorYLine = new LineGraphSeries<>();
+            mCoorYLine.setTitle("y direction data");
+            mCoorYLine.setColor(Color.GREEN);
+            mAccelerometerVis.addSeries(mCoorYLine);
+
+            mCoorZLine = new LineGraphSeries<>();
+            mCoorZLine.setTitle("z direction data");
+            mCoorZLine.setColor(Color.BLUE);
+            mAccelerometerVis.addSeries(mCoorZLine);
+
+            mMagnitudeLine = new LineGraphSeries<>();
+            mMagnitudeLine.setTitle("magnitude data");
+            mMagnitudeLine.setColor(Color.WHITE);
+            mAccelerometerVis.addSeries(mMagnitudeLine);
         }
         else {
             Toast accelerometer_error = Toast.makeText(MainActivity.this, "Error! No accelerometer found!", Toast.LENGTH_SHORT);
             accelerometer_error.show();
         }
-
-        graph = findViewById(R.id.accelerometer_vis);
-        LineGraphSeries<DataPoint> series = new LineGraphSeries<>(new DataPoint[] {
-                new DataPoint(0, 1),
-                new DataPoint(1, 5),
-                new DataPoint(2, 3),
-                new DataPoint(3, 2),
-                new DataPoint(4, 6)
-        });
-        graph.addSeries(series);
 
         //initiate and fill example array with random values
         rndAccExamplevalues = new double[64];
@@ -86,25 +109,39 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         mSensorManager.unregisterListener(this);
     }
 
+    /**
+     * real time data handling: http://www.android-graphview.org/realtime-chart/
+     * https://developer.android.com/reference/android/hardware/SensorEvent
+     *
+     * @param event
+     */
     @Override
-    public void onSensorChanged(SensorEvent event) {
+    public void onSensorChanged(final SensorEvent event) {
         Sensor sensor = event.sensor;
 
-        if (sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
-            // get device position
-            float x = event.values[0];
-            float y = event.values[1];
-            float z = event.values[2];
+        if (sensor.getType() == Sensor.TYPE_ACCELEROMETER && mAccelerometer != null) {
 
-            mCoorX = x;
-            mCoorY = y;
-            mCoorZ = z;
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    // graph: x direction time, y direction coor value
+                    mCoorXLine.appendData(new DataPoint(event.timestamp * NS2S, event.values[0]), true, 40);
+                    mCoorYLine.appendData(new DataPoint(event.timestamp * NS2S, event.values[1]), true, 40);
+                    mCoorZLine.appendData(new DataPoint(event.timestamp * NS2S, event.values[2]), true, 40);
+                    mMagnitudeLine.appendData(new DataPoint(event.timestamp * NS2S, getMagnitude(event.values[0], event.values[1], event.values[2])), true, 40);
+                }
+            });
         }
     }
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
 
+    }
+
+    // https://stackoverflow.com/questions/8565401/android-get-normalized-acceleration
+    public float getMagnitude(float x, float y, float z) {
+        return (float) Math.sqrt(x * x +  y * y + z * z);
     }
 
 
