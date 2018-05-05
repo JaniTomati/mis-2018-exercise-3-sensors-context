@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Sensor</string>
+    <string name="content_description_image">Visualization of accelerometer data</string>
 </resources>

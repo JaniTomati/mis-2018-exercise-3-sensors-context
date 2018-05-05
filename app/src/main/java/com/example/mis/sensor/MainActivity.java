@@ -15,12 +15,17 @@ import android.util.Log;
 import android.widget.Toast;
 
 import com.example.mis.sensor.FFT;
+import com.jjoe64.graphview.GraphView;
+import com.jjoe64.graphview.series.DataPoint;
+import com.jjoe64.graphview.series.LineGraphSeries;
 
 import java.util.Random;
 
 /**
+ * GraphView lib: http://www.android-graphview.org
  * https://code.tutsplus.com/tutorials/using-the-accelerometer-on-android--mobile-22125
  * https://developer.android.com/guide/topics/sensors/sensors_motion
+ * https://stackoverflow.com/questions/8565401/android-get-normalized-acceleration
  */
 public class MainActivity extends AppCompatActivity implements SensorEventListener {
 
@@ -31,7 +36,10 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     // sensor
     private SensorManager mSensorManager;
     private Sensor mAccelerometer;
-    private float mCoorX, mCoorY, mCoorZ;
+    private float mCoorX, mCoorY, mCoorZ, mMagnitude; // acceleration vector
+
+    // graph visualization
+    private GraphView graph;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -49,6 +57,16 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             Toast accelerometer_error = Toast.makeText(MainActivity.this, "Error! No accelerometer found!", Toast.LENGTH_SHORT);
             accelerometer_error.show();
         }
+
+        graph = findViewById(R.id.accelerometer_vis);
+        LineGraphSeries<DataPoint> series = new LineGraphSeries<>(new DataPoint[] {
+                new DataPoint(0, 1),
+                new DataPoint(1, 5),
+                new DataPoint(2, 3),
+                new DataPoint(3, 2),
+                new DataPoint(4, 6)
+        });
+        graph.addSeries(series);
 
         //initiate and fill example array with random values
         rndAccExamplevalues = new double[64];
