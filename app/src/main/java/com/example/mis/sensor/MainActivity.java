@@ -13,6 +13,9 @@ import android.os.AsyncTask;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.View;
+import android.widget.SeekBar;
+import android.widget.Switch;
 import android.widget.Toast;
 
 import com.example.mis.sensor.FFT;
@@ -42,6 +45,9 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
     // graph visualization
     private GraphView mAccelerometerVis;
+    private Switch mFFTswitch; // switch to FFT graph
+    private SeekBar mWindowSizeBar;
+    private SeekBar mSampleRateBar;
     private LineGraphSeries<DataPoint> mCoorXLine, mCoorYLine, mCoorZLine, mMagnitudeLine;
 
     @Override
@@ -56,6 +62,16 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             mAccelerometer = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER); // accelerometer exists
             mSensorManager.registerListener(this, mAccelerometer , SensorManager.SENSOR_DELAY_NORMAL);
 
+            mFFTswitch = findViewById(R.id.fft_switch);
+            mWindowSizeBar = findViewById(R.id.window_size);
+            mSampleRateBar = findViewById(R.id.sample_rate);
+
+            // hide seekbars in non-fft visualization
+            if (!mFFTswitch.isChecked()) {
+                mWindowSizeBar.setVisibility(View.GONE);
+                mSampleRateBar.setVisibility(View.GONE);
+            }
+
             // initialize graph and curves
             mAccelerometerVis = findViewById(R.id.accelerometer_vis);
             mAccelerometerVis.setTitle("Accelerometer Data Visualization");
@@ -63,8 +79,6 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             Viewport viewport = mAccelerometerVis.getViewport();
             viewport.setScalable(true);
             viewport.setScalableY(true);
-            viewport.setScrollable(true);
-            viewport.setScrollableY(true);
 
             mCoorXLine = new LineGraphSeries<>();
             mCoorXLine.setTitle("x direction data");
@@ -124,11 +138,15 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    // graph: x direction time, y direction coor value
-                    mCoorXLine.appendData(new DataPoint(event.timestamp * NS2S, event.values[0]), true, 40);
-                    mCoorYLine.appendData(new DataPoint(event.timestamp * NS2S, event.values[1]), true, 40);
-                    mCoorZLine.appendData(new DataPoint(event.timestamp * NS2S, event.values[2]), true, 40);
-                    mMagnitudeLine.appendData(new DataPoint(event.timestamp * NS2S, getMagnitude(event.values[0], event.values[1], event.values[2])), true, 40);
+
+                    if (!mFFTswitch.isChecked()) {
+                        // graph: x direction time, y direction coor value
+                        mCoorXLine.appendData(new DataPoint(event.timestamp * NS2S, event.values[0]), true, 40);
+                        mCoorYLine.appendData(new DataPoint(event.timestamp * NS2S, event.values[1]), true, 40);
+                        mCoorZLine.appendData(new DataPoint(event.timestamp * NS2S, event.values[2]), true, 40);
+                        mMagnitudeLine.appendData(new DataPoint(event.timestamp * NS2S, getMagnitude(event.values[0], event.values[1], event.values[2])), true, 40);
+                    }
+
                 }
             });
         }
@@ -142,6 +160,18 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     // https://stackoverflow.com/questions/8565401/android-get-normalized-acceleration
     public float getMagnitude(float x, float y, float z) {
         return (float) Math.sqrt(x * x +  y * y + z * z);
+    }
+
+
+    // hide seekbars in non-fft mode
+    public void seekbarToggle(View view) {
+        if (!mFFTswitch.isChecked()) {
+            mWindowSizeBar.setVisibility(View.GONE);
+            mSampleRateBar.setVisibility(View.GONE);
+        } else {
+            mWindowSizeBar.setVisibility(View.VISIBLE);
+            mSampleRateBar.setVisibility(View.VISIBLE);
+        }
     }
 
 
