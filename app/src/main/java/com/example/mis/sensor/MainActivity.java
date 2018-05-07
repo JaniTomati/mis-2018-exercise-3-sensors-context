@@ -16,6 +16,7 @@ import android.util.Log;
 import android.view.View;
 import android.widget.SeekBar;
 import android.widget.Switch;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.example.mis.sensor.FFT;
@@ -46,10 +47,13 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
     // graph visualization
     private GraphView mAccelerometerVis;
+    private LineGraphSeries<DataPoint> mCoorXLine, mCoorYLine, mCoorZLine, mMagnitudeLine, mFFTLine;
+
     private Switch mFFTswitch; // switch to FFT graph
     private SeekBar mWindowSizeBar;
     private SeekBar mSampleRateBar;
-    private LineGraphSeries<DataPoint> mCoorXLine, mCoorYLine, mCoorZLine, mMagnitudeLine, mFFTLine;
+    private TextView mTextWsize;
+    private TextView mTextSrate;
 
     private int mWindowSize = 64; // has to be power of 2
     private int mSampleRate = SensorManager.SENSOR_DELAY_NORMAL; // 3
@@ -71,10 +75,15 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             mWindowSizeBar = findViewById(R.id.window_size);
             mSampleRateBar = findViewById(R.id.sample_rate);
 
+            mTextWsize = findViewById(R.id.text_wsize);
+            mTextSrate = findViewById(R.id.text_srate);
+
             // hide seekbars in non-fft visualization
             if (!mFFTswitch.isChecked()) {
                 mWindowSizeBar.setVisibility(View.GONE);
                 mSampleRateBar.setVisibility(View.GONE);
+                mTextWsize.setVisibility(View.GONE);
+                mTextSrate.setVisibility(View.GONE);
             }
 
             // initialize graph and curves
@@ -84,6 +93,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             Viewport viewport = mAccelerometerVis.getViewport();
             viewport.setScalable(true);
             viewport.setScalableY(true);
+            viewport.setScrollable(true);
+            viewport.setScrollableY(true);
 
             mCoorXLine = new LineGraphSeries<>();
             mCoorXLine.setTitle("x direction data");
@@ -111,10 +122,79 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             mAccelerometerVis.addSeries(mFFTLine);
 
             magnitudeValues = new double[mWindowSize];
+
+            // https://examples.javacodegeeks.com/android/core/widget/seekbar/android-seekbar-example/
+            mTextWsize.setText("Window Size: " + mWindowSize);
+            mWindowSizeBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                int mProgress = 0;
+
+                @Override
+                public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                    mProgress = progress + 3;
+                    mWindowSize = (int) Math.pow(2, mProgress);
+                    //Toast.makeText(getApplicationContext(), "Changing seekbar's progress to " + mProgress, Toast.LENGTH_SHORT).show();
+                }
+
+                @Override
+                public void onStartTrackingTouch(SeekBar seekBar) {
+                    //Toast.makeText(getApplicationContext(), "Started tracking seekbar", Toast.LENGTH_SHORT).show();
+                }
+
+                @Override
+                public void onStopTrackingTouch(SeekBar seekBar) {
+                    mTextWsize.setText("Window Size: " + mWindowSize);
+                    magnitudeValues = new double[mWindowSize];
+                    mIndexFFT = 0;
+                    //Toast.makeText(getApplicationContext(), "Stopped tracking seekbar", Toast.LENGTH_SHORT).show();
+                }
+            });
+
+            mTextSrate.setText("Sample Rate: ");
+            mSampleRateBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                int mProgress = 0;
+
+                @Override
+                public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                    mProgress = progress;
+                    switch(mProgress) {
+                        case 0: mSampleRate = SensorManager.SENSOR_DELAY_FASTEST;
+                            break;
+                        case 1: mSampleRate = SensorManager.SENSOR_DELAY_GAME;
+                            break;
+                        case 2: mSampleRate = SensorManager.SENSOR_DELAY_NORMAL;
+                            break;
+                        case 3: mSampleRate = SensorManager.SENSOR_DELAY_UI;
+                            break;
+                    }
+                    //Toast.makeText(getApplicationContext(), "Changing seekbar's progress to " + mProgress, Toast.LENGTH_SHORT).show();
+                }
+
+                @Override
+                public void onStartTrackingTouch(SeekBar seekBar) {
+                    //Toast.makeText(getApplicationContext(), "Started tracking seekbar", Toast.LENGTH_SHORT).show();
+                }
+
+                @Override
+                public void onStopTrackingTouch(SeekBar seekBar) {
+                    switch(mProgress) {
+                        case 0: mTextSrate.setText("Sample Rate: SENSOR_DELAY_FASTEST");
+                            break;
+                        case 1: mTextSrate.setText("Sample Rate: SENSOR_DELAY_GAME");
+                            break;
+                        case 2: mTextSrate.setText("Sample Rate: SENSOR_DELAY_NORMAL");
+                            break;
+                        case 3: mTextSrate.setText("Sample Rate: SENSOR_DELAY_UI");
+                            break;
+                    }
+                    mSensorManager.unregisterListener(MainActivity.this);
+                    mSensorManager.registerListener(MainActivity.this, mAccelerometer, mSampleRate);
+                    //Toast.makeText(getApplicationContext(), "Stopped tracking seekbar", Toast.LENGTH_SHORT).show();
+                }
+            });
+
         }
         else {
-            Toast accelerometer_error = Toast.makeText(MainActivity.this, "Error! No accelerometer found!", Toast.LENGTH_SHORT);
-            accelerometer_error.show();
+            Toast.makeText(MainActivity.this, "Error! No accelerometer found!", Toast.LENGTH_SHORT).show();
         }
 
         //initiate and fill example array with random values
@@ -158,8 +238,6 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                         mCoorZLine.appendData(new DataPoint(event.timestamp * NS2S, event.values[2]), true, 250);
                         mMagnitudeLine.appendData(new DataPoint(event.timestamp * NS2S, getMagnitude(event.values[0], event.values[1], event.values[2])), true, 40);
                     } else {
-                        mMagnitudeLine.appendData(new DataPoint(event.timestamp * NS2S, getMagnitude(event.values[0], event.values[1], event.values[2])), true, 40);
-
                         magnitudeValues[mIndexFFT % mWindowSize] = getMagnitude(event.values[0], event.values[1], event.values[2]);
                         ++mIndexFFT;
                         new FFTAsynctask(mWindowSize).execute(magnitudeValues);
@@ -209,9 +287,13 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         if (!mFFTswitch.isChecked()) {
             mWindowSizeBar.setVisibility(View.GONE);
             mSampleRateBar.setVisibility(View.GONE);
+            mTextWsize.setVisibility(View.GONE);
+            mTextSrate.setVisibility(View.GONE);
         } else {
             mWindowSizeBar.setVisibility(View.VISIBLE);
             mSampleRateBar.setVisibility(View.VISIBLE);
+            mTextWsize.setVisibility(View.VISIBLE);
+            mTextSrate.setVisibility(View.VISIBLE);
         }
 
         clearGraph(mAccelerometerVis);
