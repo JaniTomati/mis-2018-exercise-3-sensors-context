@@ -38,6 +38,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     //example variables
     private double[] rndAccExamplevalues;
     private double[] freqCounts;
+    private double[] magnitudeValues;
 
     // sensor
     private SensorManager mSensorManager;
@@ -48,7 +49,11 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private Switch mFFTswitch; // switch to FFT graph
     private SeekBar mWindowSizeBar;
     private SeekBar mSampleRateBar;
-    private LineGraphSeries<DataPoint> mCoorXLine, mCoorYLine, mCoorZLine, mMagnitudeLine;
+    private LineGraphSeries<DataPoint> mCoorXLine, mCoorYLine, mCoorZLine, mMagnitudeLine, mFFTLine;
+
+    private int mWindowSize = 64; // has to be power of 2
+    private int mSampleRate = SensorManager.SENSOR_DELAY_NORMAL; // 3
+    private int mIndexFFT = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -99,6 +104,13 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             mMagnitudeLine.setTitle("magnitude data");
             mMagnitudeLine.setColor(Color.WHITE);
             mAccelerometerVis.addSeries(mMagnitudeLine);
+
+            mFFTLine = new LineGraphSeries<>();
+            mFFTLine.setTitle("transformed magnitude data");
+            mFFTLine.setColor(Color.CYAN);
+            mAccelerometerVis.addSeries(mFFTLine);
+
+            magnitudeValues = new double[mWindowSize];
         }
         else {
             Toast accelerometer_error = Toast.makeText(MainActivity.this, "Error! No accelerometer found!", Toast.LENGTH_SHORT);
@@ -106,15 +118,15 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         }
 
         //initiate and fill example array with random values
-        rndAccExamplevalues = new double[64];
-        randomFill(rndAccExamplevalues);
-        new FFTAsynctask(64).execute(rndAccExamplevalues);
+        //rndAccExamplevalues = new double[64];
+        //randomFill(rndAccExamplevalues);
+        //new FFTAsynctask(64).execute(rndAccExamplevalues);
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        mSensorManager.registerListener(this, mAccelerometer, SensorManager.SENSOR_DELAY_NORMAL);
+        mSensorManager.registerListener(this, mAccelerometer, mSampleRate);
     }
 
     @Override
@@ -141,10 +153,16 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
                     if (!mFFTswitch.isChecked()) {
                         // graph: x direction time, y direction coor value
-                        mCoorXLine.appendData(new DataPoint(event.timestamp * NS2S, event.values[0]), true, 40);
-                        mCoorYLine.appendData(new DataPoint(event.timestamp * NS2S, event.values[1]), true, 40);
-                        mCoorZLine.appendData(new DataPoint(event.timestamp * NS2S, event.values[2]), true, 40);
+                        mCoorXLine.appendData(new DataPoint(event.timestamp * NS2S, event.values[0]), true, 250);
+                        mCoorYLine.appendData(new DataPoint(event.timestamp * NS2S, event.values[1]), true, 250);
+                        mCoorZLine.appendData(new DataPoint(event.timestamp * NS2S, event.values[2]), true, 250);
                         mMagnitudeLine.appendData(new DataPoint(event.timestamp * NS2S, getMagnitude(event.values[0], event.values[1], event.values[2])), true, 40);
+                    } else {
+                        mMagnitudeLine.appendData(new DataPoint(event.timestamp * NS2S, getMagnitude(event.values[0], event.values[1], event.values[2])), true, 40);
+
+                        magnitudeValues[mIndexFFT % mWindowSize] = getMagnitude(event.values[0], event.values[1], event.values[2]);
+                        ++mIndexFFT;
+                        new FFTAsynctask(mWindowSize).execute(magnitudeValues);
                     }
 
                 }
@@ -157,14 +175,37 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
     }
 
+
+    // clear graph data
+    public void clearGraph(GraphView graph) {
+        graph.removeAllSeries();
+        DataPoint[] clear_array = new DataPoint[0]; // create empty point array
+        mCoorXLine.resetData(clear_array);          // reset existing lines
+        mCoorYLine.resetData(clear_array);
+        mCoorZLine.resetData(clear_array);
+        mMagnitudeLine.resetData(clear_array);
+        mFFTLine.resetData(clear_array);
+
+        if (!mFFTswitch.isChecked()) {
+            mAccelerometerVis.addSeries(mCoorXLine);
+            mAccelerometerVis.addSeries(mCoorYLine);
+            mAccelerometerVis.addSeries(mCoorZLine);
+            mAccelerometerVis.addSeries(mMagnitudeLine);
+        } else {
+            mAccelerometerVis.addSeries(mFFTLine);
+        }
+    }
+
+
     // https://stackoverflow.com/questions/8565401/android-get-normalized-acceleration
     public float getMagnitude(float x, float y, float z) {
         return (float) Math.sqrt(x * x +  y * y + z * z);
     }
 
 
-    // hide seekbars in non-fft mode
+    // hide seekbars in non-fft mode and clear the graph
     public void seekbarToggle(View view) {
+
         if (!mFFTswitch.isChecked()) {
             mWindowSizeBar.setVisibility(View.GONE);
             mSampleRateBar.setVisibility(View.GONE);
@@ -172,6 +213,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             mWindowSizeBar.setVisibility(View.VISIBLE);
             mSampleRateBar.setVisibility(View.VISIBLE);
         }
+
+        clearGraph(mAccelerometerVis);
     }
 
 
@@ -220,6 +263,13 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         protected void onPostExecute(double[] values) {
             //hand over values to global variable after background task is finished
             freqCounts = values;
+
+            // add points to fft series
+            DataPoint[] fft_point = new DataPoint[this.wsize];
+            for (int i = 0; i < this.wsize; ++i) {
+                fft_point[i] = new DataPoint(i, freqCounts[i]);
+            }
+            mFFTLine.resetData(fft_point);
         }
     }
 
