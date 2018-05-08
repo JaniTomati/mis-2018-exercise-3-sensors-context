@@ -55,7 +55,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private TextView mTextWsize;
     private TextView mTextSrate;
 
-    private int mWindowSize = 64; // has to be power of 2
+    private int mWindowSize = 256; // has to be power of 2
     private int mSampleRate = SensorManager.SENSOR_DELAY_NORMAL; // 3
     private int mIndexFFT = 0;
 
@@ -121,9 +121,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             mFFTLine.setColor(Color.CYAN);
             mAccelerometerVis.addSeries(mFFTLine);
 
-            magnitudeValues = new double[mWindowSize];
-
             // https://examples.javacodegeeks.com/android/core/widget/seekbar/android-seekbar-example/
+            mWindowSize = (int) Math.pow(2, mWindowSizeBar.getProgress() + 3);
             mTextWsize.setText("Window Size: " + mWindowSize);
             mWindowSizeBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
                 int mProgress = 0;
@@ -144,12 +143,25 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 public void onStopTrackingTouch(SeekBar seekBar) {
                     mTextWsize.setText("Window Size: " + mWindowSize);
                     magnitudeValues = new double[mWindowSize];
-                    mIndexFFT = 0;
                     //Toast.makeText(getApplicationContext(), "Stopped tracking seekbar", Toast.LENGTH_SHORT).show();
                 }
             });
 
-            mTextSrate.setText("Sample Rate: ");
+            magnitudeValues = new double[mWindowSize];
+
+            String delay_string = "";
+            switch(mSampleRateBar.getProgress()) {
+                case 0: delay_string = "SENSOR_DELAY_FASTEST";
+                    break;
+                case 1: delay_string = "SENSOR_DELAY_GAME";
+                    break;
+                case 2: delay_string = "SENSOR_DELAY_NORMAL";
+                    break;
+                case 3: delay_string = "SENSOR_DELAY_UI";
+                    break;
+            }
+            mTextSrate.setText("Sample Rate: " + delay_string);
+
             mSampleRateBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
                 int mProgress = 0;
 
@@ -176,21 +188,26 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
                 @Override
                 public void onStopTrackingTouch(SeekBar seekBar) {
+                    String delay_string = "";
                     switch(mProgress) {
-                        case 0: mTextSrate.setText("Sample Rate: SENSOR_DELAY_FASTEST");
+                        case 0: delay_string = "SENSOR_DELAY_FASTEST";
                             break;
-                        case 1: mTextSrate.setText("Sample Rate: SENSOR_DELAY_GAME");
+                        case 1: delay_string = "SENSOR_DELAY_GAME";
                             break;
-                        case 2: mTextSrate.setText("Sample Rate: SENSOR_DELAY_NORMAL");
+                        case 2: delay_string = "SENSOR_DELAY_NORMAL";
                             break;
-                        case 3: mTextSrate.setText("Sample Rate: SENSOR_DELAY_UI");
+                        case 3: delay_string = "SENSOR_DELAY_UI";
                             break;
                     }
+                    mTextSrate.setText("Sample Rate: " + delay_string);
                     mSensorManager.unregisterListener(MainActivity.this);
                     mSensorManager.registerListener(MainActivity.this, mAccelerometer, mSampleRate);
                     //Toast.makeText(getApplicationContext(), "Stopped tracking seekbar", Toast.LENGTH_SHORT).show();
                 }
             });
+
+            Log.i("mWindowSize", Integer.toString(mWindowSize));
+            Log.i("mSampleRate", Integer.toString(mSampleRate));
 
         }
         else {
@@ -213,6 +230,35 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     protected void onPause() {
         super.onPause();
         mSensorManager.unregisterListener(this);
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putInt("mSampleRateBar_progress", mSampleRateBar.getProgress());
+        outState.putInt("mWindowSizeBar_progress", mWindowSizeBar.getProgress());
+        outState.putInt("mSampleRateBar_visibility", mSampleRateBar.getVisibility());
+        outState.putInt("mWindowSizeBar_visibility", mWindowSizeBar.getVisibility());
+        outState.putInt("mWindowSize", mWindowSize);
+        outState.putInt("mSampleRate", mSampleRate);
+        outState.putBoolean("useFFT", mFFTswitch.isChecked());
+    }
+
+    @Override
+    protected void onRestoreInstanceState(Bundle savedInstanceState) {
+        super.onRestoreInstanceState(savedInstanceState);
+        mSampleRateBar.setProgress(savedInstanceState.getInt("mSampleRateBar_progress"));
+        mWindowSizeBar.setProgress(savedInstanceState.getInt("mWindowSizeBar_progress"));
+        mSampleRateBar.setVisibility(savedInstanceState.getInt("mSampleRateBar_visibility"));
+        mTextSrate.setVisibility(savedInstanceState.getInt("mSampleRateBar_visibility"));
+        mWindowSizeBar.setVisibility(savedInstanceState.getInt("mWindowSizeBar_visibility"));
+        mTextWsize.setVisibility(savedInstanceState.getInt("mWindowSizeBar_visibility"));
+        mWindowSize = savedInstanceState.getInt("mWindowSize");
+        mSampleRate = savedInstanceState.getInt("mSampleRate");
+        mFFTswitch.setChecked(savedInstanceState.getBoolean("useFFT"));
+
+        Log.i("mWindowSize", Integer.toString(mWindowSize));
+        Log.i("mSampleRate", Integer.toString(mSampleRate));
     }
 
     /**
@@ -238,9 +284,15 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                         mCoorZLine.appendData(new DataPoint(event.timestamp * NS2S, event.values[2]), true, 250);
                         mMagnitudeLine.appendData(new DataPoint(event.timestamp * NS2S, getMagnitude(event.values[0], event.values[1], event.values[2])), true, 40);
                     } else {
-                        magnitudeValues[mIndexFFT % mWindowSize] = getMagnitude(event.values[0], event.values[1], event.values[2]);
+                        if (mIndexFFT > mWindowSize) {        // reset array and index
+                            magnitudeValues = new double[mWindowSize];
+                            mIndexFFT = 0;
+                        } else if (mIndexFFT < mWindowSize) { // add magnitude values to array
+                            magnitudeValues[mIndexFFT] = getMagnitude(event.values[0], event.values[1], event.values[2]);
+                        } else {                              // use fft on gathered data
+                            new FFTAsynctask(mWindowSize).execute(magnitudeValues);
+                        }
                         ++mIndexFFT;
-                        new FFTAsynctask(mWindowSize).execute(magnitudeValues);
                     }
 
                 }
