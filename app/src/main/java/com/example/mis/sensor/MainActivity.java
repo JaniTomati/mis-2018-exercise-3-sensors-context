@@ -253,8 +253,9 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         mTextSrate.setVisibility(savedInstanceState.getInt("mSampleRateBar_visibility"));
         mWindowSizeBar.setVisibility(savedInstanceState.getInt("mWindowSizeBar_visibility"));
         mTextWsize.setVisibility(savedInstanceState.getInt("mWindowSizeBar_visibility"));
-        mWindowSize = savedInstanceState.getInt("mWindowSize");
-        mSampleRate = savedInstanceState.getInt("mSampleRate");
+        mWindowSize = savedInstanceState.getInt("mWindowSize"); // mWindowSize an mSampleRate are overwritten again
+        mSampleRate = savedInstanceState.getInt("mSampleRate"); // results in wrong values when the layout changes
+                                                                     // landscape view is disabled for now
         mFFTswitch.setChecked(savedInstanceState.getBoolean("useFFT"));
 
         Log.i("mWindowSize", Integer.toString(mWindowSize));
@@ -393,6 +394,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
         }
 
+
         @Override
         protected void onPostExecute(double[] values) {
             //hand over values to global variable after background task is finished
@@ -406,8 +408,6 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             mFFTLine.resetData(fft_point);
         }
     }
-
-
 
 
     /**
