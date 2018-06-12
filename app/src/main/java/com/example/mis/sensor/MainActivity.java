@@ -47,6 +47,9 @@ import com.jjoe64.graphview.series.DataPoint;
 import com.jjoe64.graphview.series.LineGraphSeries;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Random;
 
 /**
@@ -55,13 +58,21 @@ import java.util.Random;
  * https://developer.android.com/guide/topics/sensors/sensors_motion
  * https://developer.android.com/guide/topics/media/mediaplayer
  */
-public class MainActivity extends AppCompatActivity implements SensorEventListener, GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener {
+public class MainActivity extends AppCompatActivity implements SensorEventListener, GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener, LocationListener {
 
     private static final float NS2S = 1.0f / 1000000000.0f;
     // The minimum distance to change Updates in meters
     private static final long MIN_DISTANCE_CHANGE_FOR_UPDATES = 1   ; //10*1 10 meters
     // The minimum time between updates in milliseconds
     private static final long MIN_TIME_BW_UPDATES = 1000 * 1; // 1 second
+
+    private final static int REQUEST_CODE_ASK_PERMISSIONS = 1;
+
+    private static final String[] REQUIRED_SDK_PERMISSIONS = new String[] {
+            Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.WRITE_EXTERNAL_STORAGE };
+
+    protected static DetectedActivity mActivity;
+
 
     //example variables
     private double[] rndAccExamplevalues;
@@ -89,12 +100,10 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private GoogleApiClient mApiClient;
     private ActivityIntentService mActivityService;
     private MediaPlayer mMediaPlayer;
+    private MediaPlayer mMediaPlayer2;
 
-    private boolean mLocationPermissionGranted;
     private LocationManager mLocationManager;
-    private Location mLastKnownLocation = new Location("");
-    private FusedLocationProviderClient mFusedLocationProviderClient;
-    private boolean isGPSEnabled;
+    private Location mCurrentLocation;
 
 
 
@@ -102,6 +111,17 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        checkPermission(); // get location permission
+
+        mLocationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
+        mLocationManager .requestLocationUpdates(LocationManager.GPS_PROVIDER, 0, 0, this);
+
+        mActivityService = new ActivityIntentService();
+        mMediaPlayer = MediaPlayer.create(MainActivity.this, R.raw.erstes_abenteuer);
+        mMediaPlayer.isLooping();
+        mMediaPlayer2 = MediaPlayer.create(MainActivity.this, R.raw.the_hunt);
+        mMediaPlayer2.isLooping();
 
         // check whether accelerometer exists
         mAccelerometer = null;
@@ -248,23 +268,19 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             Log.i("mWindowSize", Integer.toString(mWindowSize));
             Log.i("mSampleRate", Integer.toString(mSampleRate));
 
-
-            mApiClient = new GoogleApiClient.Builder(this)
-                    .addApi(ActivityRecognition.API)
-                    .addConnectionCallbacks(this)
-                    .addOnConnectionFailedListener(this)
-                    .build();
-            mApiClient.connect();
-
-            mActivityService = new ActivityIntentService();
-
-            mMediaPlayer = MediaPlayer.create(this, R.raw.erstes_abenteuer);
-            isGPSEnabled = mLocationManager.isProviderEnabled(LocationManager.GPS_PROVIDER);
+            //isGPSEnabled = mLocationManager.isProviderEnabled(LocationManager.GPS_PROVIDER);
 
 
         } else {
             Toast.makeText(MainActivity.this, "Error! No accelerometer found!", Toast.LENGTH_SHORT).show();
         }
+
+        mApiClient = new GoogleApiClient.Builder(this)
+                .addApi(ActivityRecognition.API)
+                .addConnectionCallbacks(this)
+                .addOnConnectionFailedListener(this)
+                .build();
+        mApiClient.connect();
 
         //initiate and fill example array with random values
         //rndAccExamplevalues = new double[64];
@@ -406,7 +422,6 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         clearGraph(mAccelerometerVis);
     }
 
-
     @Override
     public void onPointerCaptureChanged(boolean hasCapture) {
 
@@ -414,16 +429,14 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
     @Override
     public void onConnected(@Nullable Bundle bundle) {
-        Intent intent = new Intent( this, ActivityIntentService.class );
-        PendingIntent pendingIntent = PendingIntent.getService( this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT );
-        ActivityRecognition.ActivityRecognitionApi.requestActivityUpdates( mApiClient, 1, pendingIntent );
-
-        Toast.makeText(getApplicationContext(), "Before Activity ", Toast.LENGTH_SHORT).show();
-
+        Intent intent = new Intent(this, ActivityIntentService.class);
+        PendingIntent pendingIntent = PendingIntent.getService(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
+        ActivityRecognition.ActivityRecognitionApi.requestActivityUpdates(mApiClient, 1, pendingIntent);
 
         try {
+            Log.i("Activity", "I am active: " + mActivityService.getActivity());
             if(mActivityService.getActivity() != null) {
-                Toast.makeText(getApplicationContext(), "Get Activity: " + mActivityService.getActivity(), Toast.LENGTH_SHORT).show();
+                Log.i("Activity", "Get Activity: " + mActivityService.getActivity());
 
                 activityHandler(mActivityService.getActivity());
             }
@@ -443,13 +456,51 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     }
 
     public void activityHandler(DetectedActivity activity) throws IOException {
-        if(activity.getType() == DetectedActivity.RUNNING) {
+        Toast.makeText(this, "Music playing '", Toast.LENGTH_LONG).show();
+        if(activity.getType() == DetectedActivity.RUNNING && mCurrentLocation.getSpeed() < 3 && !mMediaPlayer.isPlaying()) { // 3 m/s = 10,8 km/h
             mMediaPlayer.start();
-        } else if(activity.getType() == DetectedActivity.ON_BICYCLE) {
-            mMediaPlayer.start();
-        } else {
+            Log.i("Music Player", "Yey music is playing!");
+            Toast.makeText(this, "Music playing '", Toast.LENGTH_LONG).show();
+        } else if(activity.getType() == DetectedActivity.ON_BICYCLE && mCurrentLocation.getSpeed() < 7 && !mMediaPlayer.isPlaying()) { // 7 m/s = 25,2 km/h
+            mMediaPlayer2.start();
+        } else if(activity.getType() != DetectedActivity.RUNNING || activity.getType() != DetectedActivity.ON_BICYCLE){
             mMediaPlayer.stop();
+            mMediaPlayer2.stop();
+            //mMediaPlayer.release();
+            //mMediaPlayer2.release();
         }
+    }
+
+    @Override
+    public void onLocationChanged(Location location) {
+            mCurrentLocation = location;
+            Log.i("Location", "Latitude:" + location.getLatitude() + ", Longitude:" + location.getLongitude());
+        while(mApiClient.isConnected()){
+            try {
+                //Log.i("Activity", "I am active: " + mActivityService.getActivity());
+                if(mActivityService.getActivity() != null) {
+
+                    activityHandler(mActivityService.getActivity());
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    @Override
+    public void onStatusChanged(String provider, int status, Bundle extras) {
+
+    }
+
+    @Override
+    public void onProviderEnabled(String provider) {
+
+    }
+
+    @Override
+    public void onProviderDisabled(String provider) {
+
     }
 
 
@@ -506,6 +557,51 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 fft_point[i] = new DataPoint(i, freqCounts[i]);
             }
             mFFTLine.resetData(fft_point);
+        }
+    }
+
+
+    /**
+     * Checks the dynamically-controlled permissions and requests missing permissions from end user.
+     * https://developer.here.com/documentation/android-starter/topics/request-android-permissions.html
+     */
+    protected void checkPermission() {
+        final List<String> missingPermissions = new ArrayList<String>();
+        // check all required dynamic permissions
+        for (final String permission : REQUIRED_SDK_PERMISSIONS) {
+            final int result = ContextCompat.checkSelfPermission(this, permission);
+            if (result != PackageManager.PERMISSION_GRANTED) {
+                missingPermissions.add(permission);
+            }
+        }
+        if (!missingPermissions.isEmpty()) {
+            // request all missing permissions
+            final String[] permissions = missingPermissions
+                    .toArray(new String[missingPermissions.size()]);
+            ActivityCompat.requestPermissions(this, permissions, REQUEST_CODE_ASK_PERMISSIONS);
+        } else {
+            final int[] grantResults = new int[REQUIRED_SDK_PERMISSIONS.length];
+            Arrays.fill(grantResults, PackageManager.PERMISSION_GRANTED);
+            onRequestPermissionsResult(REQUEST_CODE_ASK_PERMISSIONS, REQUIRED_SDK_PERMISSIONS,
+                    grantResults);
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String permissions[],
+                                           @NonNull int[] grantResults) {
+        switch (requestCode) {
+            case REQUEST_CODE_ASK_PERMISSIONS:
+                for (int index = permissions.length - 1; index >= 0; --index) {
+                    if (grantResults[index] != PackageManager.PERMISSION_GRANTED) {
+                        // exit the app if one permission is not granted
+                        Toast.makeText(this, "Required permission '" + permissions[index]
+                                + "' not granted!", Toast.LENGTH_LONG).show();
+                    } else {
+                    }
+                }
+                // all permissions were granted
+                break;
         }
     }
 

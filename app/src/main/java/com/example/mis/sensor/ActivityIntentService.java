@@ -17,7 +17,7 @@ import java.util.List;
  */
 public class ActivityIntentService extends IntentService {
 
-    private DetectedActivity mActivity;
+    //protected DetectedActivity mActivity;
 
     public ActivityIntentService() {
         super("ActivityIntentService");
@@ -39,11 +39,11 @@ public class ActivityIntentService extends IntentService {
         if(ActivityRecognitionResult.hasResult(intent)) {
             ActivityRecognitionResult result = ActivityRecognitionResult.extractResult(intent);
             Log.i("User Activity", result.getMostProbableActivity().toString());
-            mActivity = result.getMostProbableActivity();
+            MainActivity.mActivity = result.getMostProbableActivity();
         }
     }
 
     public DetectedActivity getActivity() {
-        return mActivity;
+        return MainActivity.mActivity;
     }
 }
